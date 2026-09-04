@@ -1,0 +1,23 @@
+starting_equity: 100000
+broker: paper        # paper | alpaca
+paper: true          # Alpaca paper vs live endpoint (only used with --broker alpaca)
+
+strategy:
+  swing_lookback: 3
+  liquidity_tolerance_pct: 0.05
+  min_risk_reward: 2.0
+  kill_zones: [ny_am, london_open, silver_bullet_am, silver_bullet_pm]
+  require_kill_zone: true
+  max_bars_after_choch: 20
+
+risk:
+  risk_per_trade_pct: 0.5
+  max_daily_loss_pct: 2.0
+  max_open_positions: 1
+  max_trades_per_day: 5
+
+runner:
+  symbol: QQQ
+  interval: 5m
+  lookback_period: 5d
+  poll_seconds: 60
