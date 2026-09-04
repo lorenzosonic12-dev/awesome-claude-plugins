@@ -15,6 +15,7 @@ risk:
   max_daily_loss_pct: 2.0
   max_open_positions: 1
   max_trades_per_day: 5
+  max_position_notional_pct: 100.0   # cap position value at this % of equity
 
 runner:
   symbol: QQQ

@@ -64,7 +64,13 @@ def find_swing_points(df: pd.DataFrame, lookback: int = 3) -> list[SwingPoint]:
 def detect_structure_events(df: pd.DataFrame, swings: list[SwingPoint]) -> list[StructureEvent]:
     """Walk forward through candle closes, tracking the most recent unbroken
     swing high/low, and flag BOS/CHoCH the first time a close trades beyond
-    one of them."""
+    one of them.
+
+    The reference is the *most recent* pivot, not the most extreme one. In a
+    downtrend the level that matters is the latest lower high -- breaking it
+    is the change of character. Tracking the highest high instead would keep
+    pointing at some stale level from before the trend began.
+    """
     events: list[StructureEvent] = []
     trend: Direction | None = None
 
@@ -79,11 +85,9 @@ def detect_structure_events(df: pd.DataFrame, swings: list[SwingPoint]) -> list[
         # same bar's breakout -- it only becomes relevant for future bars.
         while next_swing is not None and next_swing.index < ts:
             if next_swing.kind == "high":
-                if last_high is None or next_swing.price > last_high.price:
-                    last_high = next_swing
+                last_high = next_swing
             else:
-                if last_low is None or next_swing.price < last_low.price:
-                    last_low = next_swing
+                last_low = next_swing
             next_swing = next(swing_iter, None)
 
         close = row["close"]
@@ -111,11 +115,9 @@ def detect_structure_events(df: pd.DataFrame, swings: list[SwingPoint]) -> list[
         # available to judge breakouts on subsequent bars.
         while next_swing is not None and next_swing.index == ts:
             if next_swing.kind == "high":
-                if last_high is None or next_swing.price > last_high.price:
-                    last_high = next_swing
+                last_high = next_swing
             else:
-                if last_low is None or next_swing.price < last_low.price:
-                    last_low = next_swing
+                last_low = next_swing
             next_swing = next(swing_iter, None)
 
     return events

@@ -19,9 +19,23 @@ from ict_bot.core.structure import (
     Direction,
     StructureEvent,
     StructureEventType,
+    SwingPoint,
     detect_structure_events,
     find_swing_points,
 )
+from ict_bot.core.liquidity import LiquidityPool
+
+
+@dataclass
+class MarketContext:
+    """Everything the detectors found in one pass over a frame."""
+
+    swings: list[SwingPoint]
+    events: list[StructureEvent]
+    pools: list[LiquidityPool]
+    sweeps: list[LiquiditySweep]
+    fvgs: list[FairValueGap]
+    order_blocks: list[OrderBlock]
 
 
 @dataclass
@@ -60,7 +74,9 @@ class ICTStrategy:
     def __init__(self, config: ICTStrategyConfig | None = None) -> None:
         self.config = config or ICTStrategyConfig()
 
-    def generate_signals(self, df: pd.DataFrame) -> list[Signal]:
+    def build_context(self, df: pd.DataFrame) -> MarketContext:
+        """Run every detector once over the frame. Signal generation and live
+        analysis both read from this, so the two can never drift apart."""
         cfg = self.config
         swings = find_swing_points(df, lookback=cfg.swing_lookback)
         events = detect_structure_events(df, swings)
@@ -70,6 +86,16 @@ class ICTStrategy:
         mitigate_fvgs(fvgs, df)
         obs = detect_order_blocks(df, events)
         mitigate_obs(obs, df)
+        return MarketContext(
+            swings=swings, events=events, pools=pools,
+            sweeps=sweeps, fvgs=fvgs, order_blocks=obs,
+        )
+
+    def generate_signals(self, df: pd.DataFrame, context: MarketContext | None = None) -> list[Signal]:
+        cfg = self.config
+        ctx = context if context is not None else self.build_context(df)
+        events, pools, sweeps = ctx.events, ctx.pools, ctx.sweeps
+        fvgs, obs = ctx.fvgs, ctx.order_blocks
 
         chochs = [e for e in events if e.event_type == StructureEventType.CHOCH]
         signals: list[Signal] = []
@@ -91,11 +117,11 @@ class ICTStrategy:
             if choch.direction == Direction.BULLISH:
                 entry = bottom
                 stop = min(sweep.price, bottom) - gap_size * 0.1
-                target = self._next_target(pools, entry, Direction.BULLISH)
+                target = self._next_target(pools, entry, Direction.BULLISH, as_of=array_index)
             else:
                 entry = top
                 stop = max(sweep.price, top) + gap_size * 0.1
-                target = self._next_target(pools, entry, Direction.BEARISH)
+                target = self._next_target(pools, entry, Direction.BEARISH, as_of=array_index)
 
             if target is None:
                 continue
@@ -169,9 +195,29 @@ class ICTStrategy:
         return candidates[0]
 
     @staticmethod
-    def _next_target(pools, entry: float, direction: Direction) -> float | None:
+    def _next_target(
+        pools: list[LiquidityPool],
+        entry: float,
+        direction: Direction,
+        as_of: pd.Timestamp | None = None,
+    ) -> float | None:
+        """Nearest untouched pool beyond the entry.
+
+        `as_of` restricts the search to pools that already existed and were
+        still unswept at that bar. Without it the target could be a pool that
+        only formed later in the frame -- invisible at entry time, and pure
+        lookahead in a backtest.
+        """
+
+        def visible(pool: LiquidityPool) -> bool:
+            if as_of is None:
+                return not pool.swept
+            if max(pool.swing_indices) > as_of:
+                return False  # pool hadn't formed yet
+            return pool.swept_at is None or pool.swept_at > as_of
+
         if direction == Direction.BULLISH:
-            above = [p.price for p in pools if p.side == "buy" and p.price > entry and not p.swept]
+            above = [p.price for p in pools if p.side == "buy" and p.price > entry and visible(p)]
             return min(above) if above else None
-        below = [p.price for p in pools if p.side == "sell" and p.price < entry and not p.swept]
+        below = [p.price for p in pools if p.side == "sell" and p.price < entry and visible(p)]
         return max(below) if below else None

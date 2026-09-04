@@ -50,17 +50,76 @@ nasdaq-ict-bot/
 ├── src/ict_bot/
 │   ├── core/                # structure, FVG, order blocks, liquidity, sessions
 │   ├── strategy/            # ICT confluence strategy -> Signal objects
+│   ├── analysis/            # live read: analyzer, setup states, terminal panel
 │   ├── risk/                # position sizing, daily loss limit, trade caps
 │   ├── backtest/            # bar-by-bar simulation + performance metrics
-│   ├── data/                # OHLCV fetching (yfinance)
+│   ├── data/                # yfinance polling, Alpaca history, live bar stream
 │   ├── broker/              # Broker interface: PaperBroker, AlpacaBroker
 │   ├── live/                # polling loop that ties strategy -> risk -> broker
 │   └── utils/                # config loading, logging
 ├── scripts/
+│   ├── run_analyzer.py      # watch a live market (read-only)
 │   ├── run_backtest.py
 │   └── run_live.py
 └── tests/                    # unit tests for every core module
 ```
+
+## Real-time analysis
+
+The analyzer watches a live market and shows you the model's read as it
+changes, bar by bar. It is **read-only** — it constructs no broker and can
+place no order.
+
+```bash
+# live streaming bars from Alpaca (free IEX feed; needs .env keys)
+python scripts/run_analyzer.py --source alpaca --symbol QQQ
+
+# delayed polling via yfinance, no account required
+python scripts/run_analyzer.py --source yfinance --symbol QQQ
+
+# replay recent history bar by bar — works outside market hours
+python scripts/run_analyzer.py --source replay --period 5d
+```
+
+```
+┌─ QQQ ──────────────────────────────────────────────2024-01-02 07:50 ET ┐
+│ LAST         102.60     TREND        ▲ bullish                         │
+│ RANGE        99.40 – 102.00         above range                        │
+│ SESSION      ny_am                  ● tradeable                        │
+├─ SETUP ────────────────────────────────────────────────────────────────┤
+│ ▸ SIGNAL READY   4/4 gates                                             │
+│   ✓ sweep          sell-side sweep @ 99.40                             │
+│   ✓ CHoCH          CHoCH bullish @ 104.00                              │
+│   ✓ PD array       FVG 101.20-102.50 tagged                            │
+│   ✓ time + R:R     2.49R in ny_am                                      │
+├─ SIGNAL ───────────────────────────────────────────────────────────────┤
+│   LONG  entry 101.20   stop 99.27   target 106.01                      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+The setup state machine is the point: rather than only reporting a
+finished signal, it tells you which gate the market is currently stalled
+at, so you can see a setup building.
+
+| State | Meaning |
+|---|---|
+| `idle` | no recent liquidity sweep |
+| `liquidity swept` | stops taken, waiting on structure to flip |
+| `choch confirmed` | structure flipped against the sweep, no array yet |
+| `awaiting retrace` | array formed, price hasn't come back to tag it |
+| `armed` | array tagged; blocked only on kill zone or R:R |
+| `signal ready` | all four gates pass on this bar |
+
+### Where the data comes from
+
+`--source alpaca` opens a WebSocket to Alpaca, receives 1-minute bars and
+rolls them up locally into the configured interval, emitting a bar only
+once its window has closed — the model never analyzes a partial candle.
+History is seeded from Alpaca's own bars so the stream and the seed come
+from one venue.
+
+`--source yfinance` needs no account but returns delayed snapshots. It's
+fine for watching mechanics, not for acting on.
 
 ## Setup
 

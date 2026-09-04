@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ict_bot.core.structure import Direction
 from ict_bot.strategy.ict_strategy import ICTStrategy, ICTStrategyConfig
 
 
@@ -16,7 +17,8 @@ def _rows(bar_factory):
     rows += [bar_factory(101, 101.5, 100.5, 101) for _ in range(4)]
     rows += [bar_factory(102, 102.5, 101.9, 102.2)]  # swing high ~102.5
     rows += [bar_factory(101, 101.5, 100.5, 101) for _ in range(4)]
-    rows += [bar_factory(100.5, 100.7, 99.5, 99.7)]  # sweeps sell-side liquidity (wicks below 100.0, closes above)
+    # sweeps sell-side liquidity: wicks below the equal lows, closes back above
+    rows += [bar_factory(100.5, 100.9, 99.5, 100.6)]
     rows += [bar_factory(101, 101.5, 100.5, 101) for _ in range(3)]
     # displacement leg: breaks back above prior swing high -> CHoCH bullish, leaves FVG
     rows += [bar_factory(101, 103, 100.9, 102.8)]
@@ -39,6 +41,34 @@ def test_strategy_runs_and_signals_meet_min_rr(bar_factory, df_factory):
     assert isinstance(signals, list)
     for s in signals:
         assert s.risk_reward >= config.min_risk_reward
+
+
+def test_strategy_produces_a_real_signal_on_a_full_setup(full_setup):
+    """Guards against the whole suite passing vacuously: the canonical
+    sequence must actually generate a trade, with the kill-zone filter on."""
+    strategy = ICTStrategy()  # defaults: 2R floor, kill zones required
+    signals = strategy.generate_signals(full_setup)
+
+    assert len(signals) == 1
+    signal = signals[0]
+    assert signal.direction == Direction.BULLISH
+    assert signal.risk_reward >= 2.0
+    assert signal.stop < signal.entry < signal.target
+    assert any("sweep" in r for r in signal.reasons)
+    assert any("CHoCH" in r for r in signal.reasons)
+
+
+def test_target_ignores_liquidity_that_forms_after_the_entry(full_setup):
+    """A pool that only appears later in the frame is invisible at entry time;
+    using it as a target would be lookahead."""
+    strategy = ICTStrategy()
+    signal = strategy.generate_signals(full_setup)[0]
+    ctx = strategy.build_context(full_setup)
+
+    target_pool = next(
+        p for p in ctx.pools if abs(p.price - signal.target) < 0.02
+    )
+    assert max(target_pool.swing_indices) <= signal.index
 
 
 def test_strategy_handles_flat_data_without_error(bar_factory, df_factory):
