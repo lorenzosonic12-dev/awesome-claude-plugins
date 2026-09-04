@@ -6,10 +6,11 @@ from dataclasses import dataclass
 
 @dataclass
 class RiskConfig:
-    risk_per_trade_pct: float = 0.5   # % of equity risked per trade
-    max_daily_loss_pct: float = 2.0   # circuit breaker for the trading day
+    risk_per_trade_pct: float = 0.5        # % of equity risked per trade
+    max_daily_loss_pct: float = 2.0        # circuit breaker for the trading day
     max_open_positions: int = 1
     max_trades_per_day: int = 5
+    max_position_notional_pct: float = 100.0  # cap position value at this % of equity
 
 
 @dataclass
@@ -41,10 +42,28 @@ class RiskManager:
         return self._daily_loss >= equity * (self.config.max_daily_loss_pct / 100)
 
     def size_position(self, equity: float, entry: float, stop: float) -> TradeRisk:
-        risk_amount = equity * (self.config.risk_per_trade_pct / 100)
+        """Size by stop distance, then cap the position's notional value so a
+        tight stop can't lever the account up. `risk_amount` reflects the
+        risk actually taken after any cap is applied, not the budget."""
+        risk_budget = equity * (self.config.risk_per_trade_pct / 100)
         per_unit_risk = abs(entry - stop)
-        quantity = risk_amount / per_unit_risk if per_unit_risk else 0.0
-        return TradeRisk(quantity=quantity, risk_amount=risk_amount)
+        if not per_unit_risk:
+            return TradeRisk(quantity=0.0, risk_amount=0.0)
+
+        quantity = risk_budget / per_unit_risk
+
+        max_notional = equity * (self.config.max_position_notional_pct / 100)
+        if entry > 0 and quantity * entry > max_notional:
+            quantity = max_notional / entry
+
+        return TradeRisk(quantity=quantity, risk_amount=quantity * per_unit_risk)
+
+    def sync_open_positions(self, count: int) -> None:
+        """Reconcile the internal position counter against the broker's real
+        open position count. The live loop has no fill callbacks, so without
+        this the counter only ever increments and `can_trade` latches off
+        after the first trade."""
+        self._open_positions = max(0, count)
 
     def register_trade_open(self) -> None:
         self._trades_today += 1

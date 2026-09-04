@@ -57,13 +57,19 @@ class LiveRunner:
         self._last_seen = latest_ts
 
         equity = self.broker.get_equity()
+
+        # The broker is the source of truth for what's actually open -- there
+        # are no fill callbacks here, so reconcile before consulting the caps.
+        open_positions = self.broker.get_open_position_count(cfg.symbol)
+        self.risk_manager.sync_open_positions(open_positions)
+
         if self.risk_manager.is_daily_loss_limit_hit(equity):
             logger.warning("Daily loss limit hit; standing down for %s", self._current_day)
             return
+        if open_positions > 0:
+            return
         if not self.risk_manager.can_trade():
             logger.info("Risk manager blocked new trades (open positions / daily cap)")
-            return
-        if self.broker.get_open_position_count(cfg.symbol) > 0:
             return
 
         signals = self.strategy.generate_signals(df)
