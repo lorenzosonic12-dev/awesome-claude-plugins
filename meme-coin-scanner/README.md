@@ -30,13 +30,36 @@ checks from [GoPlus Security](https://docs.gopluslabs.io/reference/token-securit
 Every result also carries a list of plain-English warnings (e.g. `security:
 top 10 holders own 61% of supply`) so a high score is never a black box.
 
+## Liquidity Radar
+
+`scripts/liquidity_radar.py` answers a narrower question than the main
+scanner: *which pairs' liquidity is moving fastest right now?* A single
+API response has no history, so it samples DexScreener twice, minutes
+apart, and computes each pair's liquidity delta between the two readings
+-- rapid **inflow** (fresh capital locking in fast) can precede a pump,
+rapid **outflow** is the signature of a liquidity pull in progress.
+
+```bash
+python scripts/liquidity_radar.py --interval-seconds 300 --min-liquidity 3000 --top 40 --out snapshot.json
+```
+
+The scoring logic lives in `core/velocity.py` (`compute_velocity`,
+`compute_all_velocities`) and is independent of the composite score above
+-- a pair can be a poor long-term candidate and still show a real-time
+liquidity spike worth flagging.
+
+A live dashboard built on this script is published as a Claude Artifact
+-- see the link in the pull request / conversation that added it. It
+embeds one real scan on load and upgrades to whatever the backend last
+published whenever the artifact's shared data is refreshed.
+
 ## Project layout
 
 ```
 meme-coin-scanner/
 ├── config.yaml              # search queries, filters, scoring weights, security thresholds
 ├── src/meme_scanner/
-│   ├── core/                # TokenPair model, hard filters, composite scoring
+│   ├── core/                # TokenPair model, hard filters, composite scoring, liquidity velocity
 │   ├── data/                # DexScreener client, GoPlus Security client
 │   ├── report/              # plain-text table + CSV export
 │   ├── utils/                # config loading
