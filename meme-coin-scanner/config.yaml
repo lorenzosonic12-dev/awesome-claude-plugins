@@ -1,0 +1,25 @@
+scan:
+  # Search terms sent to DexScreener; results across queries are merged and de-duplicated.
+  queries: ["solana meme", "pepe", "dog", "pump.fun", "base meme"]
+  chains: [solana, base, ethereum, bsc]   # empty list ([]) = allow every chain
+  min_liquidity_usd: 10000
+  min_volume_h24_usd: 5000
+  max_age_hours: 72
+  min_txns_h1: 5
+  top_n: 25
+
+scoring:
+  # Must sum to ~1.0; each subscore is 0-100 before weighting.
+  weights:
+    liquidity_health: 0.25   # liquidity vs. market cap -- thin liquidity is a rug-pull setup
+    volume_turnover: 0.20    # 24h volume vs. liquidity -- how actively it's trading
+    buy_pressure: 0.20       # buys vs. sells in the last hour
+    momentum: 0.15           # recent price action, penalized if already parabolic
+    freshness: 0.10          # peaks in the first 24h, decays afterward
+    security: 0.10           # GoPlus honeypot/tax/holder-concentration checks
+
+security:
+  enabled: true              # query GoPlus Security for each candidate (slower, adds an HTTP call/token)
+  max_buy_tax_pct: 10
+  max_sell_tax_pct: 10
+  max_top_holder_pct: 30     # top 10 holders' combined share of supply
