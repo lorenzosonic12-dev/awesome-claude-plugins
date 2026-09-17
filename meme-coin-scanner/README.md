@@ -30,6 +30,20 @@ checks from [GoPlus Security](https://docs.gopluslabs.io/reference/token-securit
 Every result also carries a list of plain-English warnings (e.g. `security:
 top 10 holders own 61% of supply`) so a high score is never a black box.
 
+## Web dashboard
+
+`web/` holds **Rugsense Scanner**, a React + Vite + Tailwind single-page
+app that puts this scanner behind a real-time interface: global metrics,
+a six-check security pipeline (LP lock, honeypot, taxes, mint/freeze
+authority, holder concentration), a sortable and paginated monitoring
+table with a 0-100 DegenScore, and a simulated feed of newly created
+pairs streaming through the pipeline. It opens on a real scan exported by
+`scripts/export_seed.py`. See [`web/README.md`](web/README.md).
+
+```bash
+cd web && npm install && npm run dev
+```
+
 ## Liquidity Radar
 
 `scripts/liquidity_radar.py` answers a narrower question than the main

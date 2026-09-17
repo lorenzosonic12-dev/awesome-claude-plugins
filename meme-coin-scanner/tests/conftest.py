@@ -20,9 +20,10 @@ def make_raw_pair(**overrides) -> dict:
         "liquidity": {"usd": 50000},
         "fdv": 500000,
         "marketCap": 400000,
-        "volume": {"h24": 120000, "h6": 40000, "h1": 8000},
-        "priceChange": {"h1": 5.2, "h24": 34.1},
+        "volume": {"h24": 120000, "h6": 40000, "h1": 8000, "m5": 1200},
+        "priceChange": {"m5": 1.4, "h1": 5.2, "h24": 34.1},
         "txns": {
+            "m5": {"buys": 9, "sells": 4},
             "h1": {"buys": 40, "sells": 20},
             "h24": {"buys": 500, "sells": 300},
         },

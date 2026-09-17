@@ -61,6 +61,53 @@ def test_score_security_penalizes_high_taxes():
     assert any("sell tax" in w for w in warnings)
 
 
+def test_score_security_treats_missing_data_as_unknown_not_safe():
+    """GoPlus returns empty lists/strings for tokens it hasn't indexed;
+    those must never read as a clean bill of health."""
+    warnings: list[str] = []
+    score = score_security(SecurityReport(), warnings, SecurityThresholds())
+    assert score < 100
+    assert any("not reported" in w for w in warnings)
+
+
+def test_score_security_rewards_a_fully_clean_report():
+    warnings: list[str] = []
+    clean = SecurityReport(
+        is_honeypot=False,
+        is_open_source=True,
+        is_mintable=False,
+        is_freezable=False,
+        buy_tax_pct=0.0,
+        sell_tax_pct=0.0,
+        top_holder_pct=12.0,
+        lp_locked_pct=100.0,
+    )
+    assert score_security(clean, warnings, SecurityThresholds()) == 100.0
+    assert warnings == []
+
+
+def test_score_security_flags_unlocked_liquidity():
+    warnings: list[str] = []
+    report = SecurityReport(
+        is_honeypot=False, is_mintable=False, is_freezable=False,
+        buy_tax_pct=0.0, sell_tax_pct=0.0, top_holder_pct=5.0, lp_locked_pct=40.0,
+    )
+    score = score_security(report, warnings, SecurityThresholds())
+    assert score < 100
+    assert any("LP is locked or burned" in w for w in warnings)
+
+
+def test_score_security_flags_active_freeze_authority():
+    warnings: list[str] = []
+    report = SecurityReport(
+        is_honeypot=False, is_mintable=False, is_freezable=True,
+        buy_tax_pct=0.0, sell_tax_pct=0.0, top_holder_pct=5.0, lp_locked_pct=100.0,
+    )
+    score = score_security(report, warnings, SecurityThresholds())
+    assert score < 100
+    assert any("freeze authority" in w for w in warnings)
+
+
 def test_score_security_neutral_when_unchecked():
     warnings: list[str] = []
     assert score_security(None, warnings, SecurityThresholds()) == 50.0

@@ -11,6 +11,9 @@ def test_from_dexscreener_parses_core_fields(raw_pair_factory):
     assert pair.volume_h24 == 120000
     assert pair.txns_h1.buys == 40
     assert pair.txns_h1.sells == 20
+    assert pair.txns_m5.buys == 9
+    assert pair.volume_m5 == 1200
+    assert pair.price_change_m5 == 1.4
 
 
 def test_age_hours_uses_pair_created_at(raw_pair_factory):

@@ -36,8 +36,11 @@ class TokenPair:
     volume_h24: float
     volume_h6: float
     volume_h1: float
+    volume_m5: float
+    price_change_m5: float
     price_change_h1: float
     price_change_h24: float
+    txns_m5: Txns
     txns_h1: Txns
     txns_h24: Txns
     pair_created_at_ms: int | None
@@ -78,8 +81,11 @@ class TokenPair:
             volume_h24=float(volume.get("h24") or 0.0),
             volume_h6=float(volume.get("h6") or 0.0),
             volume_h1=float(volume.get("h1") or 0.0),
+            volume_m5=float(volume.get("m5") or 0.0),
+            price_change_m5=float(price_change.get("m5") or 0.0),
             price_change_h1=float(price_change.get("h1") or 0.0),
             price_change_h24=float(price_change.get("h24") or 0.0),
+            txns_m5=_txns("m5"),
             txns_h1=_txns("h1"),
             txns_h24=_txns("h24"),
             pair_created_at_ms=raw.get("pairCreatedAt"),

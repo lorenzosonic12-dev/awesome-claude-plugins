@@ -27,6 +27,7 @@ class SecurityThresholds:
     max_buy_tax_pct: float = 10.0
     max_sell_tax_pct: float = 10.0
     max_top_holder_pct: float = 30.0
+    min_lp_locked_pct: float = 95.0
 
 
 @dataclass
@@ -103,21 +104,54 @@ def score_security(
         return 0.0
 
     score = 100.0
+    unknown: list[str] = []
+
     if report.is_mintable:
         warnings.append("security: mint authority is still active (supply can be inflated)")
         score -= 35
-    if report.buy_tax_pct > thresholds.max_buy_tax_pct:
+    elif report.is_mintable is None:
+        unknown.append("mint authority")
+
+    if report.is_freezable:
+        warnings.append("security: freeze authority is still active (holders can be frozen out)")
+        score -= 30
+    elif report.is_freezable is None:
+        unknown.append("freeze authority")
+
+    if report.buy_tax_pct is None:
+        unknown.append("buy tax")
+    elif report.buy_tax_pct > thresholds.max_buy_tax_pct:
         warnings.append(f"security: high buy tax ({report.buy_tax_pct:.1f}%)")
         score -= 20
-    if report.sell_tax_pct > thresholds.max_sell_tax_pct:
+
+    if report.sell_tax_pct is None:
+        unknown.append("sell tax")
+    elif report.sell_tax_pct > thresholds.max_sell_tax_pct:
         warnings.append(f"security: high sell tax ({report.sell_tax_pct:.1f}%)")
         score -= 25
-    if report.top_holder_pct > thresholds.max_top_holder_pct:
+
+    if report.top_holder_pct is None:
+        unknown.append("holder concentration")
+    elif report.top_holder_pct > thresholds.max_top_holder_pct:
         warnings.append(f"security: top 10 holders own {report.top_holder_pct:.1f}% of supply")
         score -= 25
+
+    if report.lp_locked_pct is None:
+        unknown.append("LP lock/burn")
+    elif report.lp_locked_pct < thresholds.min_lp_locked_pct:
+        warnings.append(f"security: only {report.lp_locked_pct:.1f}% of LP is locked or burned")
+        score -= 30
+
     if report.is_open_source is False:
         warnings.append("security: contract source is not verified")
         score -= 10
+
+    # Missing data is not a pass: each unreported check costs a little and
+    # is named, so a token nobody has indexed never looks clean.
+    if unknown:
+        warnings.append("security: not reported by GoPlus -- " + ", ".join(unknown))
+        score -= 6 * len(unknown)
+
     return _clamp(score)
 
 
